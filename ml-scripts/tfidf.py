@@ -7,25 +7,73 @@ import time
 import functools
 import pandas as pd
 import re
+import os
 class MyCorpus(object):
     """ Helper class for the gensim-based TF-IDF extraction """
 
     def clean_IR(self,block):
+      #fix aligns
+      block=block.replace('align ', 'align')
       #clean metadata flags
-      block = re.sub(r'(!)((?:[a-z][a-z0-9_]*))', "", block)
+      block = re.sub(r'(,)(\s+)(!)((?:[a-z][a-z0-9_]*))', "", block)
       block = re.sub(r'(!)(\d+)', "", block)
+      #clean comma at the end of each line
+      #block = re.sub(r'(,)(\s)(\|)(\.)(\|)','|.|',block)
+      #block = re.sub(r'(,)(\|)(\.)(\|)','|.|',block)
       #replace %n with VAR
-      block = re.sub(r"(%)(\d+)", "VAR", block)
+      block = re.sub(r"(%)(\d+)", "VARo", block)
+      #replace %varname with namedVar
+      block = re.sub(r'(%)((?:[a-z][a-z0-9_\.]*))', "VARo", block)
+      block = re.sub(r'(%)(.)((?:[a-z_][a-z0-9_\.]*))', "VARo", block)
+
+      #replace %n with REF
+      block = re.sub(r"(@)(\d+)", "REFo", block)
+      #replace %varname with namedVar
+      block = re.sub(r'(@)((?:[a-z][a-z0-9_\.]*))', "REFo", block)
+      block = re.sub(r'(@)(.)((?:[a-z_][a-z0-9_\.]*))', "REFo", block)
+
+      #block = re.sub(r"-?(\d+)", "KONSTANT", block)
+
       #replace llvm native functions
-      block = re.sub( r'(\|)(\.)(\|).*?(@)(llvm).*?(\|)(\.)(\|)','|.|',block) #(\.)*?(\|)(\.)(\|)','|.|',block)
+      block = re.sub( r'(call)(\s)(void)(\s)(@llvm.).*?(\|)(\.)(\|)',' |.|',block) #(\.)*?(\|)(\.)(\|)','|.|',block)
+      #replace int pointers
+      #block = re.sub(r'(i8)', "io", block)
+      #block = re.sub(r'(i16)', "ih", block)
+      #block = re.sub(r'(i32)', "itt", block)
+      #block = re.sub(r'(i64)', "iss", block)
+      
+      #clean #numbers
+      block = re.sub(r'0[xX][0-9a-fA-F]+','hexval', block) 
+      block = re.sub(r'0[xX][k0-9a-fA-F]+','hextag', block) 
+      block = re.sub(r'(#)(\d+)', "#n", block)
+      #replace %n with VAR
+      #block = re.sub(r'(,)(\s+)', "narg", block)
+      #block = re.sub(r'(;)', " ", block)
+      #replace int values
+      block = re.sub(r"[+\-]?[^\w]?(?:0|[1-9]\d*)(?:\.\d*)?(?:[eE][+\-]?\d+)", "KE", block)
+      #block = re.sub(r"-?[\d.]+(?:e-?\d+)?", "KE", block)
+      block = re.sub(r'([\s[;(^-])(\d+)([ \)\];,$])',r'\1N\3', block)
+      #block = re.sub(r'(\s+)(\d+)(\s+)', " N ", block)
+      #block = re.sub(r'(\s+)(\d+)(\))', " N) ", block)
+      #block = re.sub(r'(\s+)(\d+)(,)', " N,", block)
+      #block = re.sub(r'(\s+)(-)(\d+)(\s+)', "-N ", block)
+      #block = re.sub(r'(\s+)(-)(\d+)(,)', "-N", block)
+      #block = re.sub(r'(^-\d+$)', "-N", block)
       return block
     def dump_tokens(x,y):
         #print("x:",x,"y:",y)
         x.tokens.add_documents([y])
     def get_tokens(x,y):
-        #print("x:",x,"y:",y)
-        y = x.clean_IR(y)
-        a= [word for word in y.lower().replace("|.|",'\n').split() if word  not in ['',' ',",","%","(",")",",",":","\n","$","|.|"]]
+        unclean_y = y#.split('|.|')
+        y = x.clean_IR(y.lower())
+        clean_y = y#.split('|.|')
+        #print(len(clean_y),len(unclean_y))
+        z = zip(clean_y,unclean_y)
+        #for ci,ui in z:
+         # print("From\n", ui, '\nTo:\n', ci, '\n')
+         # print("**********************")
+        #print(unclean_y.replace('|.|','\n'),'##############\n',clean_y.replace('|.|','\n'),'************')
+        a= [word for word in y.replace("|.|",'\n').split() if word  not in ['',' ',",","%","(",")",",",":","\n","$","|.|"]]
         return a
     def __init__(self, dataframe):
         self.dataframe = dataframe
@@ -59,16 +107,16 @@ def getTupleKey(l, k):
             if element[0] == k:
                 return element[1]
     return 0
-def extractTFIDFMemoryFriendly(df, maxfeatures=128,tokenextension="token", outextension="tfidf"):
+def extractTFIDFMemoryFriendly(df, maxfeatures=128,data_path='',tokenextension="token", outextension="tfidf"):
 #""" Extracts TF-IDF features from corpus using the memory friendly gensim library """
 #    try:
 # Now instantiate an instance of the MyCorpus class
   corpus_mem_friendly = MyCorpus(df)
   # Save the tokens to file and load them again just to get the cross-document count (:s)
-  filename = "corpus_%s_%s" % (str(int(time.time())), tokenextension)
-  corpus_mem_friendly.tokens.save_as_text(filename)
+  filename = "corpus.%s" % (tokenextension)
+  corpus_mem_friendly.tokens.save_as_text(os.path.join(data_path,filename))
   print("Saved",filename)
-  tokens = open(filename).read().split('\n')
+  tokens = open(os.path.join(data_path,filename)).read().split('\n')
   tokenTuples = []
   for t in tokens:
     #print(t)
@@ -90,8 +138,8 @@ def extractTFIDFMemoryFriendly(df, maxfeatures=128,tokenextension="token", outex
         #prettyPrint("Picking the best %s features from the sorted tokens list" % maxfeatures)
 
   for vectorIndex in range(len(allVectors)):
-    print("Processing vector #%s out of %s vectors" % (vectorIndex+1, len(allVectors)))
-    for featureIndex in range(maxfeatures):
+    #print("Processing vector #%s out of %s vectors" % (vectorIndex+1, len(allVectors)))
+    for featureIndex in range(min(len(tokenTuples),maxfeatures)):
 # a. Get the token key
       tokenKey = tokenTuples[featureIndex][0]
 #print allVectors[vectorIndex], tokenKey, getTupleKey(allVectors[vectorIndex], tokenKey)

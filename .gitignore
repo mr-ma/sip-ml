@@ -1,3 +1,7 @@
+#large h5 files
+nodes.h5
+edges.h5
+
 # Prerequisites
 *.d
 

@@ -7,7 +7,12 @@ for ds in $dataset*; do
     blocks=$ds/blocks.csv
     rel=$ds/relations.csv
     echo "handling $ds $blocks" 
-    mkdir -p $result_path/$ds
-    python3 ml-scripts/extract-features.py $ds $result_path/$ds
+    result_ds=$(basename $ds)
+    mkdir -p $result_path/$result_ds
+    if [ ! -f $result_path/$result_ds/nodes.h5 ]; then
+      python3 ml-scripts/extract-features.py $ds $result_path/$result_ds
+    else
+      echo "Already found $result_path/nodes.h5, remove it if wanna recalculate"
+    fi
   fi
 done

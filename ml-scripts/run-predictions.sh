@@ -6,6 +6,10 @@ for ds in $dataset*; do
     blocks=$ds/node_data.h5
     rel=$ds/edges.h5
     echo "handling $ds $blocks" 
-    python3 ml-scripts/localize-protection.py $ds
+    if [ ! -f $ds/result.json ]; then
+      python3 ml-scripts/localize-protection.py $ds
+    else 
+      echo "Already found results for $ds, remove $ds/result.json to recalculate"
+    fi
   fi
 done

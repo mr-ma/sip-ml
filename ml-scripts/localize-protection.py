@@ -21,34 +21,70 @@ from sklearn.utils import class_weight
 #input the path to h5 files node_data.h5 and edges.h5
 output_results = {}
 data_path = "/Users/mohsen-tum/Projects/stellargraph/smwyg"
-if len(sys.argv)>0:
+if len(sys.argv)>1:
+  print("datapath:{}".format(sys.argv[1]))
   data_path = sys.argv[1]
 
 data_dir = os.path.expanduser(data_path)
+print('Reading nodes')
+node_data=pd.read_hdf(os.path.join(data_dir, "nodes.h5"),key='node_data')
+
+print(node_data)
+print('Reading edges')
+chunks = []
+read_size = 0
+#edges= pd.read_hdf(os.path.join(data_dir, "edges.h5"),key='edges')
+#Gnx = nx.from_pandas_edgelist(edges, edge_attr="label")
+chunk_size=1000000
+#chunk_size=100000000
+Gnx = nx.Graph()
+for chunk in pd.read_hdf(os.path.join(data_dir, "edges.h5"),key='edges',chunksize=chunk_size):
+  g = nx.from_pandas_edgelist(chunk, edge_attr="label")
+  chunks.append(g)
+  read_size = read_size + chunk_size
+  print('Read edge chunk ', read_size)
+for chunk in chunks:
+  Gnx.add_edges_from(chunk.edges(data=True))
+nx.set_node_attributes(Gnx, "block", "label")
+
+
+#load all paths
+if len(sys.argv)>2:
+  print(sys.argv[2])
+  for directory in sys.argv[2].split(';'):
+    print("appending {}".format(directory))
+    tmpnode = pd.read_hdf(os.path.join(directory,'nodes.h5'),key='node_data')
+    node_data = pd.concat([node_data,tmpnode])
+    del tmpnode
+    tmpedge = pd.read_hdf(os.path.join(directory,'edges.h5'),key='edges')
+    edgelist = pd.concat([edgelist,tmpedge])
+    del tmpedge
+
+#print(edgelist)
+#node_data.set_index('uid', inplace=True)
 tfidf_count = 200 
 feature_names = ["w_{}".format(ii) for ii in range(64+tfidf_count)]
 feature_names.remove('w_63')
-column_names =  ['uid']+feature_names  + ["subject"]
-edgelist = pd.read_hdf(os.path.join(data_dir, "edges.h5"),key='edges')
-node_data=pd.read_hdf(os.path.join(data_dir, "nodes.h5"),key='node_data')
-#print(node_data)
-#print(edgelist)
-#node_data.set_index('uid', inplace=True)
+column_names =  ['uid']+feature_names  +['program']+ ["subject"]
 print("feeding edges to the graph...")
-Gnx = nx.from_pandas_edgelist(edgelist, edge_attr="label")
-nx.set_node_attributes(Gnx, "block", "label")
+
+#Gnx = nx.from_pandas_edgelist(edgelist, edge_attr="label")
+#nx.set_node_attributes(Gnx, "block", "label")
+
 set(node_data["subject"])
 print('spliting train and test data...')
-train_data, test_data = model_selection.train_test_split(node_data, train_size=0.8, test_size=None, stratify=node_data['subject'])
+train_data, test_data = model_selection.train_test_split(node_data, train_size=0.7, test_size=0.3, stratify=node_data['subject'])
 from collections import Counter
 #TODO: save size of dataset, train_data, and test data
 #save the count of each subject in the blocks
 print(len(train_data), len(test_data))
-subject_groups = Counter(train_data['subject'])
-print(subject_groups)
-output_results.train_size = len(train_data)
-output_results.test_size = len(test_data)
-output_results.subject_groups = subject_groups
+subject_groups_train = Counter(train_data['subject'])
+subject_groups_test = Counter(test_data['subject'])
+output_results['train_size'] = len(train_data)
+output_results['test_size'] = len(test_data)
+output_results['subject_groups_train'] = subject_groups_train
+output_results['subject_groups_test'] = subject_groups_test
+
 node_features = node_data[feature_names]
 print (node_features)
 G = sg.StellarGraph(Gnx, node_features=node_features)
@@ -56,7 +92,7 @@ G = sg.StellarGraph(Gnx, node_features=node_features)
 print(G.info())
 print("writing graph.dot")
 #write_dot(Gnx,"graph.dot")
-output_results.graph_info=G.info()
+output_results['graph_info']=G.info()
 print("building the graph generator...")
 batch_size = 50; num_samples = [10, 5]
 generator = GraphSAGENodeGenerator(G, batch_size, num_samples)
@@ -89,7 +125,7 @@ print("testing the model...")
 test_gen = generator.flow(test_data.index, test_targets)
 history = model.fit_generator(
     train_gen,
-    epochs=35,
+    epochs=40,
     validation_data=test_gen,
     verbose=2,
     shuffle=True,
@@ -115,29 +151,82 @@ plot_history(history)
 # save test metrics
 test_metrics = model.evaluate_generator(test_gen)
 print("\nTest Set Metrics:")
-output_results.test_metrics = []
+output_results['test_metrics'] = []
 for name, val in zip(model.metrics_names, test_metrics):
-    output_results.test_metrics.append({'name':name, 'val:':val})
+    output_results['test_metrics'].append({'name':name, 'val:':val})
     print("\t{}: {:0.4f}".format(name, val))
 all_nodes = node_data.index
 all_mapper = generator.flow(all_nodes)
 all_predictions = model.predict_generator(all_mapper)
 node_predictions = target_encoding.inverse_transform(all_predictions)
 results = pd.DataFrame(node_predictions, index=all_nodes).idxmax(axis=1)
-df = pd.DataFrame({"Predicted": results, "True": node_data['subject']})
-#print(df.head(100))
+df = pd.DataFrame({"Predicted": results, "True": node_data['subject'], "program":node_data['program']})
+print(df.head(100))
 
 
 clean_result_labels = df["Predicted"].map(lambda x: x.replace('subject=',''))
 # save predicted labels
 pred_labels = np.unique(clean_result_labels.values)
+pred_program = np.unique(df['program'].values)
 # save predictions per label
-precision, recall, f1, _ = skmetrics.precision_recall_fscore_support(df['True'].values,clean_result_labels.values,labels=pred_labels)
-output_results.classifier = zip(pred_labels, precision,recall,f1)
+precision, recall, f1, _ = skmetrics.precision_recall_fscore_support(df['True'].values,clean_result_labels.values,average=None,labels=pred_labels)
+output_results['classifier'] =[]
+for lbl, prec, rec, fm in zip(pred_labels, precision,recall,f1):
+    output_results['classifier'].append({'label':lbl, 'precision':prec, 'recall':rec, 'fscore':fm})
+print(output_results['classifier'])
 print(pred_labels)
 print('precision: {}'.format(precision))
 print('recall: {}'.format(recall))
 print('fscore: {}'.format(f1))
+
+
+def save_model(model):
+  model.save(os.path.join(data_path,"model.h5"))
+
+def write_fscore_to_csv(program_classifiers):
+  import csv
+  classes = {}
+  fscores =[]
+  for classifier in program_classifiers:
+    program = classifier['program']
+    for score in classifier['classes']:
+      if score['label'] not in classes:
+        classes[score['label']]=[]
+      classes[score['label']].append((program,score['fscore'],score['samples']))
+          
+  for label, scores in classes.items():
+    with open(os.path.join(data_path,'programs_fscore_{}.csv'.format(label)), mode='w') as fscore_file:
+      fscore_writer = csv.writer(fscore_file, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)    
+      for program, score, samples in scores:
+        fscore_writer.writerow([program,score,samples])
+      array_fscore=[x[1] for x in scores]
+      array_samples= [x[2] for x in scores]
+      fscore_writer.writerow(['mean',np.mean(array_fscore), np.mean(array_samples)])
+      fscore_writer.writerow(['std',np.std(array_fscore), np.std(array_samples)])
+      fscore_writer.writerow(['median',np.median(array_fscore), np.median(array_samples)])
+
+def calc_fscore_per_program(df, programs):
+  program_classifiers = []
+  for program in programs:
+    df_program = df[(df.program == program)]
+    print(len(df),len(df_program))
+    predictions = df_program['Predicted'].map(lambda x: x.replace('subject=',''))
+    ground_truth= df_program['True']
+    #print(ground_truth)
+    pred_labels = np.unique(predictions.values)
+    precision, recall, f1, _ = skmetrics.precision_recall_fscore_support(ground_truth.values,predictions.values,labels=pred_labels)
+    classes =[]
+    counts = Counter(df_program['True'])
+    print("Check this:",program,counts)
+    for lbl, prec, rec, fm in zip(pred_labels, precision,recall,f1):
+        classes.append({'label':lbl, 'precision':prec, 'recall':rec, 'fscore':fm, 'samples':counts[lbl]})
+    program_classifiers.append({'program':program,'classes':classes})
+  return program_classifiers 
+
+
+program_scores = calc_fscore_per_program(df, pred_program)
+write_fscore_to_csv(program_scores)
+save_model(model)
 #for nid, pred, true in zip(df.index, df["Predicted"], df["True"]):
 #    Gnx.node[nid]["subject"] = true
 #    Gnx.node[nid]["PREDICTED_subject"] = pred.split("=")[-1]
@@ -168,7 +257,7 @@ import numpy as np
 X = emb
 y = np.argmax(target_encoding.transform(node_data[["subject"]].to_dict('records')), axis=1)
 if X.shape[1] > 2:
-    transform = PCA #TSNE  
+    transform = PCA#TSNE  
 
     trans = transform(n_components=2)
     emb_transformed = pd.DataFrame(trans.fit_transform(X), index=node_data.index)
