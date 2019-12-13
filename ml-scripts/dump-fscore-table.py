@@ -14,7 +14,7 @@ def read_result(path):
         subjects = 'subject_groups'
         if subjects not in data:
             subjects = 'subject_groups_test' 
-        return data["classifier"],data[subjects]
+        return data["classifier"],data['Kfold_results'],data[subjects],int(data['train_size'])+int(data['test_size'])
 
 def read_fcsv(csv_path, label):
     fmeasures,weights=[],[]
@@ -40,40 +40,39 @@ def read_fcsv(csv_path, label):
             fmeasures.append(row[1])
             weights.append(row[2])
         return fmeasures, weights
+def process_folds(kfolds,labels):
+    result = {}
+    for label in labels:
+        result[label]=[]
+    for fold in kfolds:
+        for scores in fold:
+            if np.isnan(scores['fscore']):
+                continue
+            result[scores['label']].append(scores['fscore'])
+    return result
+
 
 def process_results(result_dir):
     rows = []
-    labels = ['none','sc_guard','oh_verify','cfi_register','cfi_verify']
+    labels = ['none','sc_guard','oh_verify','cfi_verify']
     for perm in sorted(get_immediate_subdirectories(result_dir)):
         perm_dir = os.path.basename(perm)
         perm_result = os.path.join(perm,'result.json')
-        re,subjects = read_result(perm_result)
-        #print(re)
-        classifier ={}
-        for dic in re:
-            protection, fscore = dic['label'],dic['fscore']
-            classifier[protection]=fscore
-        row = [perm_dir]
+        print('processing {}'.format(perm_result))
+        re,kfolds,subjects,data_size = read_result(perm_result)
+        row = [perm_dir.replace('sbb-','').replace('sbb','').replace('-','+').replace('FLAs','CFF').replace('BCF','BC').replace('SUB','IS'),data_size]
+        fold_reads = process_folds(kfolds,labels)
         for label in labels:
-            if label not in classifier:
-                classifier[label]='N/A'
-            if label not in subjects:
-                subjects[label]='N/A'
-            #read fmeasure per program
-            p_fmeasures, weights = read_fcsv(os.path.join(perm,'programs_fscore_{}.csv'.format(label)),label)
-            weighted_stats = DescrStatsW(np.array(p_fmeasures).astype(float),weights=np.array(weights).astype(int),ddof=0)
-            print(label,weighted_stats.mean,weighted_stats.std,weighted_stats.std_mean)
-            row.append(classifier[label])
-            row.append(subjects[label])
-            row.append(weighted_stats.mean)
-            row.append(weighted_stats.std)
-            row.append(weighted_stats.std_mean)
+            row.append(np.mean(fold_reads[label]))
+            #row.append(subjects[label])
+            row.append(np.std(fold_reads[label]))
         print(row)
         rows.append(row)
 
-    with open('localization.csv', mode='w') as local_file:
+    with open(os.path.join(result_dir,'localization.csv'), mode='w') as local_file:
         local_writer = csv.writer(local_file, delimiter=';', quotechar='"', quoting=csv.QUOTE_MINIMAL)
-        rows.insert(0,['obfuscation','none','none_samples','none_median','none_std','none_std_mean','sc_guard','sc_samples','sc_median','sc_std','sc_std_mean','oh_verify','oh_vsamples','oh_median','oh_std','oh_std_mean','cfi_register','cfi_rsamples','cfir_median','cfir_std','cfir_std_mean','cfi_verify','cfi_vsamples','cfiv_median','cfiv_std','cfiv_std_mean'])
+        #rows.insert(0,['obfuscation','data_size','none','none_samples','none_std','sc_guard','sc_samples','sc_std','oh_verify','oh_vsamples','oh_std','cfi_verify','cfi_vsamples','cfiv_std'])
+        rows.insert(0,['obfuscation','data_size','none','none_std','sc_guard','sc_std','oh_verify','oh_std','cfi_verify','cfiv_std'])
         for row in rows:
             local_writer.writerow(row)
 

@@ -8,20 +8,38 @@ import functools
 import pandas as pd
 import re
 import os
+import string
+import random
+
 class MyCorpus(object):
     """ Helper class for the gensim-based TF-IDF extraction """
 
+    def randomString(self, stringLength=10):
+      """Generate a random string of fixed length """
+      letters = string.ascii_lowercase
+      return ''.join(random.choice(letters) for i in range(stringLength))
+
     def clean_IR(self,block):
+      #remove volatile, unreachable and alignments
+      block=block.replace('volatile', '').replace('unreachable','').replace('(align)(\s)(\d+)','').replace('(align)(\d+)','')#.replace('icmp',self.randomString())
+
       #fix aligns
       block=block.replace('align ', 'align')
       #clean metadata flags
       block = re.sub(r'(,)(\s+)(!)((?:[a-z][a-z0-9_]*))', "", block)
       block = re.sub(r'(!)(\d+)', "", block)
+      #before = len(block)
+      #block = re.sub(r'(store i32 5555*)','',block)
+      #block = re.sub(r'(store i32 4444*)','',block)
+      #after = len(block)
+      #if before > after:
+      #  print(block.replace('|.|','\n'))
       #clean comma at the end of each line
       #block = re.sub(r'(,)(\s)(\|)(\.)(\|)','|.|',block)
       #block = re.sub(r'(,)(\|)(\.)(\|)','|.|',block)
       #replace %n with VAR
       block = re.sub(r"(%)(\d+)", "VARo", block)
+      block = re.sub(r"(%)(_\d+)", "VARo", block)
       #replace %varname with namedVar
       block = re.sub(r'(%)((?:[a-z][a-z0-9_\.]*))', "VARo", block)
       block = re.sub(r'(%)(.)((?:[a-z_][a-z0-9_\.]*))', "VARo", block)
@@ -53,12 +71,13 @@ class MyCorpus(object):
       block = re.sub(r"[+\-]?[^\w]?(?:0|[1-9]\d*)(?:\.\d*)?(?:[eE][+\-]?\d+)", "KE", block)
       #block = re.sub(r"-?[\d.]+(?:e-?\d+)?", "KE", block)
       block = re.sub(r'([\s[;(^-])(\d+)([ \)\];,$])',r'\1N\3', block)
-      #block = re.sub(r'(\s+)(\d+)(\s+)', " N ", block)
-      #block = re.sub(r'(\s+)(\d+)(\))', " N) ", block)
-      #block = re.sub(r'(\s+)(\d+)(,)', " N,", block)
-      #block = re.sub(r'(\s+)(-)(\d+)(\s+)', "-N ", block)
-      #block = re.sub(r'(\s+)(-)(\d+)(,)', "-N", block)
-      #block = re.sub(r'(^-\d+$)', "-N", block)
+      block = re.sub(r'(\s+)(\d+)(\s+)', " N ", block)
+      block = re.sub(r'(\s+)(\d+)(\))', " N) ", block)
+      block = re.sub(r'(\s+)(\d+)(,)', " N,", block)
+      block = re.sub(r'(\s+)(-)(\d+)(\s+)', "-N ", block)
+      block = re.sub(r'(\s+)(-)(\d+)(,)', "-N", block)
+      block = re.sub(r'(\b-\d+\b)', "-N", block)
+      block = re.sub(r'(\b\d+\b)', "N", block)
       return block
     def dump_tokens(x,y):
         #print("x:",x,"y:",y)
@@ -67,7 +86,6 @@ class MyCorpus(object):
         unclean_y = y#.split('|.|')
         y = x.clean_IR(y.lower())
         clean_y = y#.split('|.|')
-        #print(len(clean_y),len(unclean_y))
         z = zip(clean_y,unclean_y)
         #for ci,ui in z:
          # print("From\n", ui, '\nTo:\n', ci, '\n')
