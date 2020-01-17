@@ -58,6 +58,9 @@ def process_results(result_dir):
     for perm in sorted(get_immediate_subdirectories(result_dir)):
         perm_dir = os.path.basename(perm)
         perm_result = os.path.join(perm,'result.json')
+        if not os.path.exists(perm_result):
+            print("Did not find result for {}".format(perm_result))
+            continue
         print('processing {}'.format(perm_result))
         re,kfolds,subjects,data_size = read_result(perm_result)
         row = [perm_dir.replace('sbb-','').replace('sbb','').replace('-','+').replace('FLAs','CFF').replace('BCF','BC').replace('SUB','IS'),data_size]

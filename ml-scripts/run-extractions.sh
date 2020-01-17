@@ -15,7 +15,7 @@ for ds in $dataset*; do
       mkdir -p "$result_path/$result_ds/process"
     fi
     if [ ! -f $result_path/$result_ds/nodes.h5 ]; then
-      python3 ml-scripts/extract-features.py $ds $result_path/$result_ds
+      python3 /home/sip/sip-ml/ml-scripts/extract-features.py $ds $result_path/$result_ds
       rm -r "$result_path/$result_ds/process"
     else
       echo "Already found $result_path/nodes.h5, remove it if wanna recalculate"

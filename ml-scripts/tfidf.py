@@ -21,7 +21,7 @@ class MyCorpus(object):
 
     def clean_IR(self,block):
       #remove volatile, unreachable and alignments
-      block=block.replace('volatile', '').replace('unreachable','').replace('(align)(\s)(\d+)','').replace('(align)(\d+)','')#.replace('icmp',self.randomString())
+      block=block.replace('volatile', '').replace('unreachable','').replace('(align)(\s)(\d+)','').replace('(align)(\d+)','').replace('icmp',self.randomString())
 
       #fix aligns
       block=block.replace('align ', 'align')

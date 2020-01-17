@@ -13,7 +13,7 @@ for ds in $dataset*; do
     fi
 
     if [ ! -f $ds/result.json ]; then
-      python3 ml-scripts/localize-protection.py $ds
+      python3 /home/sip/sip-ml/ml-scripts/localize-protection.py $ds
       rm -r "$ds/process"
     else 
       echo "Already found results for $ds, remove $ds/result.json to recalculate"

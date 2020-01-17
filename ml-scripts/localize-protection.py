@@ -108,6 +108,7 @@ def main():
   #train_data, test_data = model_selection.train_test_split(node_data, train_size=0.8, test_size=0.2, stratify=node_data['subject'].values.ravel())
   skf = StratifiedKFold(n_splits=N_KFOLDS, random_state=12321, shuffle=False)
   classifier_results=[]
+  kfold_samples=[]
   output_results = {}
   i=1
   for train_index, test_index in skf.split(node_data, node_data['subject'].values.ravel()):
@@ -117,11 +118,13 @@ def main():
     test_data=node_data.iloc[test_index]
     generator, model,x_inp,x_out, history, target_encoding, out_result = train_model(Gnx,train_data,test_data,all_features)
     classifier_results.append(out_result['classifier'])
+    kfold_samples.append({'train_size':output_result['train_size'],'test_size':output_result['train_size'],'subject_groups_train':output_result['subject_groups_train'],'subject_groups_test':output_results['subject_groups_test']})
     plot_history(history,data_path)
     output_results=out_result
   
   
   output_results['Kfold_results']=classifier_results
+  output_results['Kfold_samples']=kfold_samples
   output_results['classifier']=average_classifiers(classifier_results)
   all_nodes = node_data.index
   all_mapper = generator.flow(all_nodes)
