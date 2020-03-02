@@ -1,6 +1,5 @@
 import networkx as nx
 #from networkx.drawing.nx_pydot import write_dot
-import pygraphviz
 from networkx.drawing.nx_agraph import write_dot
 import pandas as pd
 import os
@@ -10,7 +9,7 @@ from stellargraph.mapper import GraphSAGENodeGenerator
 from stellargraph.layer import GraphSAGE
 from stellargraph.core.graph import StellarGraph
 from stellargraph.layer.hinsage import HinSAGE
-from stellargraph.mapper.node_mappers import HinSAGENodeGenerator
+#from stellargraph.mapper.node_mappers import HinSAGENodeGenerator
 import sys
 from keras import layers, optimizers, losses, metrics, Model
 from sklearn import preprocessing, feature_extraction, model_selection
