@@ -11,7 +11,11 @@ from stellargraph.core.graph import StellarGraph
 from stellargraph.layer.hinsage import HinSAGE
 #from stellargraph.mapper.node_mappers import HinSAGENodeGenerator
 import sys
-from keras import layers, optimizers, losses, metrics, Model
+#from keras import layers, optimizers, losses, metrics, Model
+from tensorflow.keras import layers, optimizers, losses, metrics, Model
+
+import json
+from functools import singledispatch
 from sklearn import preprocessing, feature_extraction, model_selection
 from sklearn import metrics as skmetrics
 from sklearn.utils import class_weight
@@ -70,13 +74,26 @@ def average_classifiers(classifiers):
     output[label]=np.mean(tmp[label])
   print(output)
   return output
- 
+
+@singledispatch
+def to_serializable(val):
+    """Used by default."""
+    return str(val)
+
+
+@to_serializable.register(np.float32)
+def ts_float32(val):
+    """Used if *val* is an instance of numpy.float32."""
+    return np.float64(val)
+
 def main():
   data_path = "/Users/mohsen-tum/Projects/stellargraph/smwyg"
   if len(sys.argv)>1:
     print("datapath:{}".format(sys.argv[1]))
     data_path = sys.argv[1]
-
+  else:
+    print("You need to supply a path")
+    exit(1)
   data_dir = os.path.expanduser(data_path)
   node_data, Gnx = read_data(data_dir)
   node_data, feature_names = select_features(node_data)
@@ -105,7 +122,7 @@ def main():
   
   all_features = node_data[feature_names]
   #train_data, test_data = model_selection.train_test_split(node_data, train_size=0.8, test_size=0.2, stratify=node_data['subject'].values.ravel())
-  skf = StratifiedKFold(n_splits=N_KFOLDS, random_state=12321, shuffle=False)
+  skf = StratifiedKFold(n_splits=N_KFOLDS, random_state=12321, shuffle=True)
   classifier_results=[]
   kfold_samples=[]
   output_results = {}
@@ -117,7 +134,7 @@ def main():
     test_data=node_data.iloc[test_index]
     generator, model,x_inp,x_out, history, target_encoding, out_result = train_model(Gnx,train_data,test_data,all_features)
     classifier_results.append(out_result['classifier'])
-    kfold_samples.append({'train_size':output_result['train_size'],'test_size':output_result['train_size'],'subject_groups_train':output_result['subject_groups_train'],'subject_groups_test':output_results['subject_groups_test']})
+    kfold_samples.append({'train_size':out_result['train_size'],'test_size':out_result['train_size'],'subject_groups_train':out_result['subject_groups_train'],'subject_groups_test':out_result['subject_groups_test']})
     plot_history(history,data_path)
     output_results=out_result
   
@@ -131,9 +148,10 @@ def main():
   
   #save_model(data_dir, model)
   #save results
-  import json
+  
+
   with open(os.path.join(data_path,'result.json'), 'w') as fp:
-    json.dump(output_results, fp)
+    json.dump(output_results, fp,default=to_serializable)
   print('Finished {} results are here:'.format(os.path.join(data_path,'result.json')))
   subjects = node_data[["subject"]]
   embed_nodes(target_encoding, all_mapper,subjects,node_data.index,x_inp,x_out,data_path)
@@ -169,19 +187,22 @@ def train_model(Gnx,train_data, test_data, all_features):
 
   target_encoding = feature_extraction.DictVectorizer(sparse=False)
   train_targets = target_encoding.fit_transform(train_data[["subject"]].to_dict('records'))
-  class_weights = class_weight.compute_class_weight('balanced',np.unique(train_targets),train_targets[:,0])
+  print(np.unique(train_data["subject"].to_list()))
+  class_weights = class_weight.compute_class_weight('balanced',np.unique(train_data["subject"].to_list()),train_data["subject"].to_list())
+  print('class_weights',class_weights)
   test_targets = target_encoding.transform(test_data[["subject"]].to_dict('records'))
   train_gen = generator.flow(train_data.index, train_targets, shuffle=True)
   graphsage_model = GraphSAGE(
   #graphsage_model = HinSAGE(
       #layer_sizes=[32, 32],
       layer_sizes=[80, 80],
-      generator=train_gen,
+      generator=generator, #train_gen,
       bias=True,
       dropout=0.5,
   )
   print("building model...")
-  x_inp, x_out = graphsage_model.build(flatten_output=True)
+  #x_inp, x_out = graphsage_model.build(flatten_output=True)
+  x_inp, x_out = graphsage_model.build()
   prediction = layers.Dense(units=train_targets.shape[1], activation="softmax")(x_out)
 
   model = Model(inputs=x_inp, outputs=prediction)

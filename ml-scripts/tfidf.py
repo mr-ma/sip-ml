@@ -83,6 +83,12 @@ class MyCorpus(object):
         #print("x:",x,"y:",y)
         x.tokens.add_documents([y])
     def get_tokens(x,y):
+        if not isinstance(y,str):
+            print('size',x.dataframe.size)
+            print(tabulate(x.dataframe, headers='keys', tablefmt='psql'))
+            print(y)
+            exit (1)
+
         unclean_y = y#.split('|.|')
         y = x.clean_IR(y.lower())
         clean_y = y#.split('|.|')
@@ -150,8 +156,10 @@ def extractTFIDFMemoryFriendly(df, maxfeatures=128,data_path='',tokenextension="
   allVectors = [v for v in corpus_mem_friendly]
 
 # Build a numpy matrix of zeros
-  X = numpy.zeros((df.count(), maxfeatures))
-
+  #X = numpy.zeros((df.count(), maxfeatures))
+  X = numpy.zeros((len(allVectors),min(len(tokenTuples),maxfeatures)))
+  print('X',len(X),len(X[0]))
+  print('Vector',len(allVectors),min(len(tokenTuples),maxfeatures))
         # Go over the first [maxfeatures] of the tokenTuples and populate the matrix
         #prettyPrint("Picking the best %s features from the sorted tokens list" % maxfeatures)
 
@@ -161,7 +169,8 @@ def extractTFIDFMemoryFriendly(df, maxfeatures=128,data_path='',tokenextension="
 # a. Get the token key
       tokenKey = tokenTuples[featureIndex][0]
 #print allVectors[vectorIndex], tokenKey, getTupleKey(allVectors[vectorIndex], tokenKey)
-      X[vectorIndex][featureIndex] = getTupleKey(allVectors[vectorIndex], tokenKey)
+      a = getTupleKey(allVectors[vectorIndex], tokenKey)
+      X[vectorIndex][featureIndex] = a
 
 #print corpus_mem_friendly.tokens.token2id
 #print tokenTuples
